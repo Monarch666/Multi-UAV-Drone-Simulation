@@ -1,0 +1,123 @@
+# ============================================================================
+# Cooperative 4-UAV Cable-Suspended Load Simulation — Master Configuration
+# ============================================================================
+# All physical quantities in SI units (kg, m, s, rad, N).
+# Coordinate frame: ENU (x-East, y-North, z-Up), right-handed.
+# ============================================================================
+
+drone:
+  mass_kg: 2.0
+  arm_length_m: 0.25
+  # Diagonal inertia tensor [Jxx, Jyy, Jzz] for a symmetric X-frame quadrotor
+  inertia_kgm2: [0.02, 0.02, 0.04]
+  # Rotor thrust coefficient: F_thrust = k_T * omega^2  (N per (rad/s)^2)
+  k_T: 1.5e-5
+  # Rotor drag/torque coefficient: tau = k_Q * omega^2  (N·m per (rad/s)^2)
+  k_Q: 2.5e-7
+  # First-order motor time constant (s) — models ESC+motor electrical lag
+  motor_time_constant_s: 0.03
+  # Maximum rotor speed (rad/s); minimum is 0 (no reverse)
+  max_motor_speed_rad_s: 900.0
+  min_motor_speed_rad_s: 50.0
+  # Cable attachment offset from drone CM in body frame (below the CM)
+  # This creates a torque arm — cable tension couples into attitude dynamics
+  cable_attach_offset_m: [0.0, 0.0, -0.05]
+  # Quadratic aerodynamic drag coefficient for the drone body
+  drag_coeff: 0.15
+
+cable:
+  natural_length_m: 1.2
+  # Stiffness: tune for < 2% elongation at working tension.
+  # At hover, each cable sees ~(total_load * g / 4) ≈ 13.5 N.
+  # 2% of 1.2 m = 0.024 m → k ≈ 13.5/0.024 ≈ 562 N/m minimum.
+  # Using 1500 N/m gives ~0.9% elongation — well within bounds.
+  # NOTE: Higher k_cable → stiffer ODE → requires implicit integrator (Radau/BDF).
+  stiffness_N_per_m: 1500.0
+  # Viscous damping in cable (Ns/m) — prevents undamped oscillation
+  damping_Ns_per_m: 15.0
+  # Cable model selector: "elastic" (spring-damper) or "rigid_constraint" (DAE)
+  model: "elastic"
+  # Baumgarte stabilization gains (used only with rigid_constraint model)
+  baumgarte_alpha: 10.0
+  baumgarte_beta: 10.0
+
+basket:
+  # Empty basket mass (without any payload)
+  empty_mass_kg: 1.2
+  # Half-extents of the rectangular basket (m): basket is 0.6 × 0.6 m
+  half_extent_m: [0.3, 0.3]
+  # Height of corner attachment points above basket CM (m)
+  corner_height_m: 0.15
+  # Basket body inertia (diagonal, for a thin rectangular plate approximation)
+  # Jxx = m/12 * (b^2 + h^2), etc. — computed at setup if not specified
+  # static_load parameters
+  static_load_kg: 1.5
+  # Position of static load in basket body frame (before CM recomputation)
+  static_load_pos_body_m: [0.0, 0.0, -0.05]
+  # Dynamic (sliding) load parameters
+  dynamic_load_kg: 0.8
+  # Floor height relative to basket CM in body frame (below center)
+  dynamic_load_floor_height_m: -0.10
+  # Coulomb friction: kinetic and static coefficients
+  friction_mu_kinetic: 0.3
+  friction_mu_static: 0.4
+  # Viscous damping on the sliding mass (Ns/m)
+  floor_viscous_damping: 0.5
+  # Regularisation velocity for smooth friction (m/s) — avoids sign() discontinuity
+  friction_v_scale: 0.01
+
+control:
+  # Control mode: "formation" (Mode A, decentralized) or "centralized" (Mode B, QP)
+  mode: "formation"
+  # Position loop gains (shared across drones / load controller)
+  Kp_pos: [8.0, 8.0, 12.0]
+  Kd_pos: [5.0, 5.0, 8.0]
+  # Attitude loop gains (geometric SO(3) controller)
+  k_R: 15.0
+  k_omega: 3.5
+  # Load-level SE(3) gains (for centralized mode)
+  Kp_load: [6.0, 6.0, 10.0]
+  Kd_load: [4.0, 4.0, 6.0]
+  k_R_load: 12.0
+  k_omega_load: 3.0
+  # QP tension bounds (N) — T_min > 0 keeps cables taut
+  T_min: 0.5
+  T_max: 40.0
+  # Desired yaw for all drones (rad)
+  desired_yaw: 0.0
+
+trajectory:
+  # Available: "hover", "circle", "lemniscate", "step"
+  type: "hover"
+  # Hover position (load CM target)
+  hover_pos: [0.0, 0.0, 3.0]
+  # Circle trajectory parameters
+  circle_center: [0.0, 0.0, 3.0]
+  circle_radius: 1.5
+  circle_omega: 0.3          # rad/s
+  circle_yaw_rate: 0.0       # rad/s (load yaw rate during circle)
+
+wind:
+  enabled: false
+  # Mean wind velocity in inertial frame (m/s)
+  mean_velocity: [1.0, 0.0, 0.0]
+  # Gust amplitude (m/s)
+  gust_amplitude: 0.5
+  # Gust frequency (rad/s)
+  gust_frequency: 1.0
+
+sim:
+  gravity: 9.80665
+  # Fixed-step RK4 fallback timestep (s)
+  dt_fixed_fallback: 1.0e-4
+  # Integrator for solve_ivp: "Radau", "BDF", or "RK45"
+  integrator: "RK45"
+  # Integration tolerances (optimized for execution speed)
+  rtol: 1.0e-4
+  atol: 1.0e-6
+  # Total simulation time (s)
+  total_time_s: 10.0
+  # Output sample rate (Hz) for logging / visualization
+  output_rate_hz: 100.0
+  # Maximum integration step size (s) — optimized for speed
+  max_step: 0.1
